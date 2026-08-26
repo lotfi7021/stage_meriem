@@ -1,12 +1,12 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
-import { Bell, BellOff, CheckCheck, AlertTriangle, Clock, FileText, Filter } from "lucide-react";
+import { Bell, BellOff, CheckCheck, AlertTriangle, Clock, FileText } from "lucide-react";
 import { PageHeader } from "@/components/steg/kpi-card";
 import { StatusBadge } from "@/components/steg/badges";
 import { Pagination, PerPageSelect } from "@/components/steg/pagination";
 import { UnauthorizedPage } from "@/components/steg/unauthorized-page";
 import { useRequirePermission } from "@/hooks/use-require-permission";
-import { clientById, formatDate, formatTND, invoices, type InvoiceStatus } from "@/lib/steg-data";
+import { useStegStore, formatTND, formatDate, clientById, DEFAULT_PER_PAGE, type InvoiceStatus } from "@/lib/store";
 
 export const Route = createFileRoute("/notifications")({
   head: () => ({
@@ -34,12 +34,13 @@ interface Notification {
 }
 
 function buildNotifications(): Notification[] {
-  const today = new Date("2026-08-24");
+  const { invoices, clients } = useStegStore.getState();
+  const today = new Date();
   const notifs: Notification[] = [];
   let n = 1;
 
   invoices.forEach((f) => {
-    const client = clientById(f.clientId);
+    const client = clientById(f.clientId, clients);
     if (!client) return;
 
     if (f.statut === "impayee") {
@@ -93,11 +94,12 @@ function buildNotifications(): Notification[] {
 }
 
 function NotificationsPage() {
+  const { clients, invoices } = useStegStore();
   const [notifications, setNotifications] = useState<Notification[]>(buildNotifications);
   const [filterType, setFilterType] = useState<"tous" | "retard" | "impayee" | "echeance">("tous");
   const [filterLu, setFilterLu] = useState<"tous" | "lu" | "non_lu">("tous");
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(15);
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
 
   const filtered = useMemo(() => {
     return notifications.filter((n) => {
@@ -147,6 +149,7 @@ function NotificationsPage() {
               setFilterType(e.target.value as typeof filterType);
               setPage(1);
             }}
+            aria-label="Filtrer par type de notification"
             className="rounded-lg border border-input bg-card px-3 py-2 text-sm"
           >
             <option value="tous">Tous les types</option>
@@ -160,6 +163,7 @@ function NotificationsPage() {
               setFilterLu(e.target.value as typeof filterLu);
               setPage(1);
             }}
+            aria-label="Filtrer par statut de lecture"
             className="rounded-lg border border-input bg-card px-3 py-2 text-sm"
           >
             <option value="tous">Tous</option>
@@ -218,7 +222,7 @@ function NotificationsPage() {
                       {!n.lu && <span className="size-2 shrink-0 rounded-full bg-primary" />}
                     </div>
                     <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
-                      <span>{clientById(n.clientId)?.nom}</span>
+                      <span>{clientById(n.clientId, clients)?.nom}</span>
                       <span>·</span>
                       <span>{formatDate(n.date)}</span>
                       <span>·</span>

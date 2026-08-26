@@ -1,20 +1,28 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
-import { ArrowUpDown, ArrowUp, ArrowDown, X } from "lucide-react";
-import { PageHeader, KpiCard } from "@/components/steg/kpi-card";
+import { useState, useMemo, useCallback } from "react";
+import { toast } from "sonner";
+import { ArrowUpDown, ArrowUp, ArrowDown, X, Plus, Pencil, Trash2 } from "lucide-react";
+import { PageHeader } from "@/components/steg/kpi-card";
 import { StatusBadge } from "@/components/steg/badges";
 import { Pagination, PerPageSelect } from "@/components/steg/pagination";
 import { UnauthorizedPage } from "@/components/steg/unauthorized-page";
 import { useRequirePermission } from "@/hooks/use-require-permission";
+import { useAuth } from "@/context/auth";
+import { InvoiceForm } from "@/components/steg/invoice-form";
+import { ConfirmDialog } from "@/components/steg/confirm-dialog";
 import {
-  clientById,
-  formatDate,
+  useStegStore,
+  computeRiskScores,
   formatTND,
-  invoices,
-  riskScores,
+  formatDate,
+  clientById,
   statusLabels,
+  DEFAULT_PER_PAGE,
+  tooltipStyle,
+  riskBarColor,
+  type Invoice,
   type InvoiceStatus,
-} from "@/lib/steg-data";
+} from "@/lib/store";
 
 export const Route = createFileRoute("/factures")({
   head: () => ({
@@ -38,14 +46,30 @@ export const Route = createFileRoute("/factures")({
 type SortKey = "id" | "dateEmission" | "dateEcheance" | "montant" | "reste";
 type SortDir = "asc" | "desc";
 
+function SortIcon({ column, sortKey, sortDir }: { column: SortKey; sortKey: SortKey; sortDir: SortDir }) {
+  if (sortKey !== column) return <ArrowUpDown className="size-3 opacity-40" />;
+  return sortDir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />;
+}
+
 function InvoicesPage() {
+  const ok = useRequirePermission("factures:view");
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission("factures:manage");
+
+  const { clients, invoices, addInvoice, updateInvoice, deleteInvoice } = useStegStore();
+
   const [statut, setStatut] = useState<InvoiceStatus | "tous">("tous");
   const [q, setQ] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("dateEmission");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
   const [selectedInvoice, setSelectedInvoice] = useState<string | null>(null);
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(15);
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
+  const [showForm, setShowForm] = useState(false);
+  const [editInvoice, setEditInvoice] = useState<Invoice | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Invoice | null>(null);
+
+  const riskScores = useMemo(() => computeRiskScores({ clients, invoices }), [clients, invoices]);
 
   const rows = useMemo(() => {
     const filtered = invoices
@@ -55,7 +79,7 @@ function InvoicesPage() {
         if (!t) return true;
         return (
           i.id.toLowerCase().includes(t) ||
-          (clientById(i.clientId)?.nom ?? "").toLowerCase().includes(t)
+          (clientById(i.clientId, clients)?.nom ?? "").toLowerCase().includes(t)
         );
       });
 
@@ -80,27 +104,24 @@ function InvoicesPage() {
       }
       return sortDir === "asc" ? cmp : -cmp;
     });
-  }, [statut, q, sortKey, sortDir]);
+  }, [statut, q, sortKey, sortDir, invoices, clients]);
 
   const total = rows.reduce((s, i) => s + i.montant, 0);
   const totalReste = rows.reduce((s, i) => s + (i.montant - i.montantPaye), 0);
 
-  const totalPages = Math.ceil(rows.length / perPage);
   const paginatedRows = rows.slice((page - 1) * perPage, page * perPage);
 
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir(sortDir === "asc" ? "desc" : "asc");
-    } else {
-      setSortKey(key);
-      setSortDir("desc");
-    }
-  };
-
-  const SortIcon = ({ column }: { column: SortKey }) => {
-    if (sortKey !== column) return <ArrowUpDown className="size-3 opacity-40" />;
-    return sortDir === "asc" ? <ArrowUp className="size-3" /> : <ArrowDown className="size-3" />;
-  };
+  const toggleSort = useCallback(
+    (key: SortKey) => {
+      if (sortKey === key) {
+        setSortDir(sortDir === "asc" ? "desc" : "asc");
+      } else {
+        setSortKey(key);
+        setSortDir("desc");
+      }
+    },
+    [sortKey, sortDir],
+  );
 
   const detail = selectedInvoice ? invoices.find((i) => i.id === selectedInvoice) : null;
 
@@ -111,10 +132,30 @@ function InvoicesPage() {
       en_retard: invoices.filter((i) => i.statut === "en_retard").length,
       impayee: invoices.filter((i) => i.statut === "impayee").length,
     }),
-    [],
+    [invoices],
   );
 
-  const ok = useRequirePermission("factures:view");
+  function handleCreate(data: Omit<Invoice, "id">) {
+    addInvoice(data);
+    setShowForm(false);
+    toast.success("Facture créée", { description: "La facture a été ajoutée." });
+  }
+
+  function handleUpdate(data: Omit<Invoice, "id">) {
+    if (!editInvoice) return;
+    updateInvoice(editInvoice.id, data);
+    setEditInvoice(null);
+    toast.success("Facture modifiée", { description: "La facture a été mise à jour." });
+  }
+
+  function handleDelete() {
+    if (!deleteTarget) return;
+    deleteInvoice(deleteTarget.id);
+    setDeleteTarget(null);
+    setSelectedInvoice(null);
+    toast.success("Facture supprimée", { description: "La facture a été supprimée." });
+  }
+
   if (!ok) return <UnauthorizedPage />;
 
   return (
@@ -122,6 +163,11 @@ function InvoicesPage() {
       <PageHeader
         title="Factures"
         subtitle={`${rows.length} factures · ${formatTND(total)} facturés · ${formatTND(totalReste)} reste dû`}
+        action={
+          canManage
+            ? { label: "Nouvelle facture", icon: Plus, onClick: () => setShowForm(true) }
+            : undefined
+        }
       />
 
       <div className="mb-4 grid gap-4 sm:grid-cols-4">
@@ -151,6 +197,7 @@ function InvoicesPage() {
             setPage(1);
           }}
           placeholder="Rechercher une facture ou un client…"
+          aria-label="Rechercher une facture ou un client"
           className="min-w-56 flex-1 rounded-lg border border-input bg-card px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/40"
         />
         <select
@@ -159,6 +206,7 @@ function InvoicesPage() {
             setStatut(e.target.value as InvoiceStatus | "tous");
             setPage(1);
           }}
+          aria-label="Filtrer par statut"
           className="rounded-lg border border-input bg-card px-3 py-2 text-sm"
         >
           <option value="tous">Tous les statuts</option>
@@ -195,15 +243,17 @@ function InvoicesPage() {
               ).map(([key, label]) => (
                 <th
                   key={label}
+                  scope="col"
                   className={`px-4 py-3 font-medium ${key ? "cursor-pointer select-none hover:text-foreground" : ""} ${key === "montant" || key === "reste" ? "text-right" : ""}`}
                   onClick={() => key && toggleSort(key as SortKey)}
                 >
                   <span className="inline-flex items-center gap-1">
                     {label}
-                    {key && <SortIcon column={key as SortKey} />}
+                    {key && <SortIcon column={key as SortKey} sortKey={sortKey} sortDir={sortDir} />}
                   </span>
                 </th>
               ))}
+              {canManage && <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -217,7 +267,7 @@ function InvoicesPage() {
                   onClick={() => setSelectedInvoice(f.id)}
                 >
                   <td className="px-4 py-3 font-medium">{f.id}</td>
-                  <td className="px-4 py-3">{clientById(f.clientId)?.nom}</td>
+                  <td className="px-4 py-3">{clientById(f.clientId, clients)?.nom}</td>
                   <td className="px-4 py-3 text-muted-foreground">{formatDate(f.dateEmission)}</td>
                   <td className="px-4 py-3 text-muted-foreground">{formatDate(f.dateEcheance)}</td>
                   <td className="px-4 py-3 text-right tabular-nums">{formatTND(f.montant)}</td>
@@ -242,6 +292,26 @@ function InvoicesPage() {
                   <td className="px-4 py-3">
                     <StatusBadge status={f.statut} />
                   </td>
+                  {canManage && (
+                    <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => setEditInvoice(f)}
+                          className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                          title="Modifier"
+                        >
+                          <Pencil className="size-4" />
+                        </button>
+                        <button
+                          onClick={() => setDeleteTarget(f)}
+                          className="rounded-md p-1.5 text-muted-foreground hover:bg-danger/12 hover:text-danger"
+                          title="Supprimer"
+                        >
+                          <Trash2 className="size-4" />
+                        </button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -252,7 +322,7 @@ function InvoicesPage() {
 
       {detail && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          className="fixed inset-0 z-40 flex items-center justify-center bg-black/50 p-4"
           onClick={() => setSelectedInvoice(null)}
         >
           <div
@@ -262,14 +332,42 @@ function InvoicesPage() {
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-lg font-semibold">{detail.id}</h2>
-                <p className="text-sm text-muted-foreground">{clientById(detail.clientId)?.nom}</p>
+                <p className="text-sm text-muted-foreground">
+                  {clientById(detail.clientId, clients)?.nom}
+                </p>
               </div>
-              <button
-                onClick={() => setSelectedInvoice(null)}
-                className="grid size-8 place-items-center rounded-lg hover:bg-secondary"
-              >
-                <X className="size-4" />
-              </button>
+              <div className="flex items-center gap-2">
+                {canManage && (
+                  <>
+                    <button
+                      onClick={() => {
+                        setSelectedInvoice(null);
+                        setEditInvoice(detail);
+                      }}
+                      className="grid size-8 place-items-center rounded-lg hover:bg-secondary"
+                      title="Modifier"
+                    >
+                      <Pencil className="size-4" />
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedInvoice(null);
+                        setDeleteTarget(detail);
+                      }}
+                      className="grid size-8 place-items-center rounded-lg hover:bg-danger/12 hover:text-danger"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="size-4" />
+                    </button>
+                  </>
+                )}
+                <button
+                  onClick={() => setSelectedInvoice(null)}
+                  className="grid size-8 place-items-center rounded-lg hover:bg-secondary"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
             </div>
 
             <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
@@ -304,7 +402,7 @@ function InvoicesPage() {
             </div>
 
             <div className="mt-4">
-              <p className="text-xs text-muted-foreground mb-1">Progression du paiement</p>
+              <p className="mb-1 text-xs text-muted-foreground">Progression du paiement</p>
               <div className="h-3 rounded-full bg-secondary">
                 <div
                   className={`h-3 rounded-full transition-all ${
@@ -319,7 +417,7 @@ function InvoicesPage() {
                   }}
                 />
               </div>
-              <p className="mt-1 text-xs text-muted-foreground text-right">
+              <p className="mt-1 text-right text-xs text-muted-foreground">
                 {detail.montant > 0 ? Math.round((detail.montantPaye / detail.montant) * 100) : 0}%
                 payé
               </p>
@@ -334,13 +432,7 @@ function InvoicesPage() {
                   <div className="mt-1 flex items-center gap-2">
                     <div className="h-2 flex-1 rounded-full bg-secondary">
                       <div
-                        className={`h-2 rounded-full ${
-                          risk.categorie === "eleve"
-                            ? "bg-danger"
-                            : risk.categorie === "moyen"
-                              ? "bg-warning"
-                              : "bg-success"
-                        }`}
+                        className={`h-2 rounded-full ${riskBarColor(risk.categorie)}`}
                         style={{ width: `${risk.score}%` }}
                       />
                     </div>
@@ -367,6 +459,24 @@ function InvoicesPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {showForm && <InvoiceForm onSubmit={handleCreate} onCancel={() => setShowForm(false)} />}
+      {editInvoice && (
+        <InvoiceForm
+          invoice={editInvoice}
+          onSubmit={handleUpdate}
+          onCancel={() => setEditInvoice(null)}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Supprimer la facture"
+          description={`Voulez-vous vraiment supprimer la facture ${deleteTarget.id} ? Tous les paiements associés seront également supprimés. Cette action est irréversible.`}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
       )}
     </>
   );

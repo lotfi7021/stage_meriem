@@ -18,20 +18,18 @@ import { Pagination, PerPageSelect } from "@/components/steg/pagination";
 import { UnauthorizedPage } from "@/components/steg/unauthorized-page";
 import { useRequirePermission } from "@/hooks/use-require-permission";
 import { ClientForm } from "@/components/steg/client-form";
+import { ConfirmDialog } from "@/components/steg/confirm-dialog";
 import { useAuth } from "@/context/auth";
 import {
-  clients,
-  addClient,
-  updateClient,
-  deleteClient,
-  computeRisk,
+  useStegStore,
+  computeRiskScores,
   formatTND,
-  invoices,
-  riskScores,
   typeLabels,
-  type ClientType,
+  DEFAULT_PER_PAGE,
+  riskBarColor,
   type Client,
-} from "@/lib/steg-data";
+  type ClientType,
+} from "@/lib/store";
 
 export const Route = createFileRoute("/clients/")({
   head: () => ({
@@ -66,13 +64,18 @@ function ClientsPage() {
   const [type, setType] = useState<ClientType | "tous">("tous");
   const [view, setView] = useState<"table" | "cards">("table");
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(12);
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
   const [showForm, setShowForm] = useState(false);
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
 
-  const [, setTick] = useState(0);
-  const refresh = () => setTick((t) => t + 1);
+  const { clients, invoices, addClient, updateClient, deleteClient } =
+    useStegStore();
+
+  const riskScores = useMemo(
+    () => computeRiskScores({ clients, invoices }),
+    [clients, invoices],
+  );
 
   const rows = useMemo(
     () =>
@@ -81,7 +84,7 @@ function ClientsPage() {
           (type === "tous" || c.type === type) &&
           c.nom.toLowerCase().includes(q.toLowerCase().trim()),
       ),
-    [q, type],
+    [q, type, clients],
   );
 
   const totalPages = Math.ceil(rows.length / perPage);
@@ -93,40 +96,28 @@ function ClientsPage() {
       entreprise: clients.filter((c) => c.type === "entreprise").length,
       administration: clients.filter((c) => c.type === "administration").length,
     }),
-    [],
+    [clients],
   );
 
   if (!ok) return <UnauthorizedPage />;
 
   function handleCreate(data: Omit<Client, "id">) {
     const created = addClient(data);
-    const risk = computeRisk(created);
-    riskScores.push(risk);
     setShowForm(false);
-    refresh();
     toast.success("Client créé", { description: `${created.nom} a été ajouté.` });
   }
 
   function handleUpdate(data: Omit<Client, "id">) {
     if (!editClient) return;
     updateClient(editClient.id, data);
-    const idx = riskScores.findIndex((r) => r.clientId === editClient.id);
-    const updated = clients.find((c) => c.id === editClient.id);
-    if (updated && idx !== -1) {
-      riskScores[idx] = computeRisk(updated);
-    }
     setEditClient(null);
-    refresh();
     toast.success("Client modifié", { description: `${data.nom} a été mis à jour.` });
   }
 
   function handleDelete() {
     if (!deleteTarget) return;
     deleteClient(deleteTarget.id);
-    const idx = riskScores.findIndex((r) => r.clientId === deleteTarget.id);
-    if (idx !== -1) riskScores.splice(idx, 1);
     setDeleteTarget(null);
-    refresh();
     toast.success("Client supprimé", { description: `${deleteTarget.nom} a été supprimé.` });
   }
 
@@ -186,6 +177,7 @@ function ClientsPage() {
               setPage(1);
             }}
             placeholder="Rechercher un client…"
+            aria-label="Rechercher un client"
             className="w-full rounded-lg border border-input bg-card py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring/40"
           />
         </div>
@@ -195,6 +187,7 @@ function ClientsPage() {
             setType(e.target.value as ClientType | "tous");
             setPage(1);
           }}
+          aria-label="Filtrer par type de client"
           className="rounded-lg border border-input bg-card px-3 py-2 text-sm"
         >
           <option value="tous">Tous les types</option>
@@ -231,13 +224,13 @@ function ClientsPage() {
           <table className="w-full text-sm">
             <thead className="bg-secondary/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 font-medium">Client</th>
-                <th className="px-4 py-3 font-medium">Type</th>
-                <th className="px-4 py-3 font-medium">Secteur</th>
-                <th className="px-4 py-3 font-medium">Ancienneté</th>
-                <th className="px-4 py-3 text-right font-medium">Encours</th>
-                <th className="px-4 py-3 font-medium">Risque</th>
-                {canManage && <th className="px-4 py-3 text-right font-medium">Actions</th>}
+                <th scope="col" className="px-4 py-3 font-medium">Client</th>
+                <th scope="col" className="px-4 py-3 font-medium">Type</th>
+                <th scope="col" className="px-4 py-3 font-medium">Secteur</th>
+                <th scope="col" className="px-4 py-3 font-medium">Ancienneté</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Encours</th>
+                <th scope="col" className="px-4 py-3 font-medium">Risque</th>
+                {canManage && <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -353,13 +346,7 @@ function ClientsPage() {
                   <div className="mt-3">
                     <div className="h-1.5 rounded-full bg-secondary">
                       <div
-                        className={`h-1.5 rounded-full ${
-                          risk.categorie === "eleve"
-                            ? "bg-danger"
-                            : risk.categorie === "moyen"
-                              ? "bg-warning"
-                              : "bg-success"
-                        }`}
+                        className={`h-1.5 rounded-full ${riskBarColor(risk.categorie)}`}
                         style={{ width: `${risk.score}%` }}
                       />
                     </div>
@@ -411,34 +398,12 @@ function ClientsPage() {
       )}
 
       {deleteTarget && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/50 p-4 animate-fade-in">
-          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-xl animate-scale-in">
-            <div className="mb-4 grid size-12 place-items-center rounded-full bg-danger/12 mx-auto">
-              <Trash2 className="size-6 text-danger" />
-            </div>
-            <h3 className="text-center text-lg font-semibold text-foreground">
-              Supprimer le client
-            </h3>
-            <p className="mt-2 text-center text-sm text-muted-foreground">
-              Voulez-vous vraiment supprimer <strong>{deleteTarget.nom}</strong> ? Toutes les
-              factures associées seront également supprimées. Cette action est irréversible.
-            </p>
-            <div className="mt-6 flex justify-center gap-3">
-              <button
-                onClick={() => setDeleteTarget(null)}
-                className="rounded-lg border border-input bg-background px-4 py-2 text-sm font-medium text-foreground hover:bg-secondary"
-              >
-                Annuler
-              </button>
-              <button
-                onClick={handleDelete}
-                className="rounded-lg bg-danger px-4 py-2 text-sm font-medium text-danger-foreground hover:bg-danger/90"
-              >
-                Supprimer
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Supprimer le client"
+          description={`Voulez-vous vraiment supprimer ${deleteTarget.nom} ? Toutes les factures associées seront également supprimées. Cette action est irréversible.`}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
       )}
     </>
   );

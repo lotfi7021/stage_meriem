@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Area,
@@ -26,16 +27,18 @@ import {
 import { KpiCard, PageHeader } from "@/components/steg/kpi-card";
 import { StatusBadge, RiskBadge } from "@/components/steg/badges";
 import {
-  clientById,
-  formatDate,
+  useStegStore,
+  computeKpis,
+  computeMonthlySeries,
+  computeStatusBreakdown,
+  computeRiskScores,
   formatTND,
-  invoices,
-  kpis,
-  monthlySeries,
-  payments,
-  riskScores,
-  statusBreakdown,
-} from "@/lib/steg-data";
+  formatDate,
+  clientById,
+  PIE_COLORS,
+  tooltipStyle,
+} from "@/lib/store";
+import type { Invoice, Payment, RiskScore } from "@/lib/store";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -56,8 +59,6 @@ export const Route = createFileRoute("/")({
   component: Dashboard,
 });
 
-const pieColors = ["var(--success)", "var(--warning)", "var(--danger)", "var(--primary)"];
-
 function getGreeting() {
   const h = new Date().getHours();
   if (h < 12) return "Bonjour";
@@ -66,17 +67,36 @@ function getGreeting() {
 }
 
 function Dashboard() {
-  const k = kpis();
-  const series = monthlySeries();
-  const pie = statusBreakdown();
-  const retards = invoices
-    .filter((i) => i.statut === "en_retard" || i.statut === "impayee")
-    .sort((a, b) => a.dateEcheance.localeCompare(b.dateEcheance))
-    .slice(0, 6);
-  const topRisk = [...riskScores].sort((a, b) => b.score - a.score).slice(0, 5);
-  const recentPayments = [...payments]
-    .sort((a, b) => b.datePaiement.localeCompare(a.datePaiement))
-    .slice(0, 5);
+  const clients = useStegStore((s) => s.clients);
+  const invoices = useStegStore((s) => s.invoices);
+  const payments = useStegStore((s) => s.payments);
+
+  const riskScores = useMemo(() => computeRiskScores({ clients, invoices }), [clients, invoices]);
+  const k = useMemo(() => computeKpis({ clients, invoices }), [clients, invoices]);
+  const series = useMemo(() => computeMonthlySeries(invoices), [invoices]);
+  const pie = useMemo(() => computeStatusBreakdown(invoices), [invoices]);
+
+  const retards = useMemo(
+    () =>
+      invoices
+        .filter((i) => i.statut === "en_retard" || i.statut === "impayee")
+        .sort((a, b) => a.dateEcheance.localeCompare(b.dateEcheance))
+        .slice(0, 6),
+    [invoices],
+  );
+
+  const topRisk = useMemo(
+    () => [...riskScores].sort((a, b) => b.score - a.score).slice(0, 5),
+    [riskScores],
+  );
+
+  const recentPayments = useMemo(
+    () =>
+      [...payments]
+        .sort((a, b) => b.datePaiement.localeCompare(a.datePaiement))
+        .slice(0, 5),
+    [payments],
+  );
 
   const lastMonth = series[series.length - 2];
   const currentMonth = series[series.length - 1];
@@ -198,12 +218,7 @@ function Dashboard() {
                 />
                 <Tooltip
                   formatter={(v: number) => formatTND(v)}
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
+                  contentStyle={tooltipStyle}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Area
@@ -234,17 +249,10 @@ function Dashboard() {
               <PieChart>
                 <Pie data={pie} dataKey="valeur" nameKey="statut" innerRadius={55} outerRadius={90}>
                   {pie.map((entry, i) => (
-                    <Cell key={entry.key} fill={pieColors[i % pieColors.length]} />
+                    <Cell key={entry.key} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                />
+                <Tooltip contentStyle={tooltipStyle} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
               </PieChart>
             </ResponsiveContainer>
@@ -265,7 +273,7 @@ function Dashboard() {
               <li key={f.id} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-foreground">
-                    {clientById(f.clientId)?.nom}
+                    {clientById(f.clientId, clients)?.nom}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {f.id} · échéance {formatDate(f.dateEcheance)}
@@ -294,7 +302,7 @@ function Dashboard() {
                 <li key={p.id} className="flex items-center justify-between gap-3 py-2.5">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">
-                      {f ? clientById(f.clientId)?.nom : "—"}
+                      {f ? clientById(f.clientId, clients)?.nom : "—"}
                     </p>
                     <p className="text-xs text-muted-foreground">
                       {p.id} · {formatDate(p.datePaiement)}
@@ -321,7 +329,7 @@ function Dashboard() {
               <li key={r.clientId} className="flex items-center justify-between gap-3 py-2.5">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium text-foreground">
-                    {clientById(r.clientId)?.nom}
+                    {clientById(r.clientId, clients)?.nom}
                   </p>
                   <p className="text-xs text-muted-foreground">{r.clientId}</p>
                 </div>

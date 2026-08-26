@@ -1,12 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Search, CreditCard, Banknote, Smartphone, Wallet } from "lucide-react";
+import { Search, CreditCard, Banknote, Smartphone, Wallet, Pencil, Trash2 } from "lucide-react";
 import { PageHeader, KpiCard } from "@/components/steg/kpi-card";
 import { Pagination, PerPageSelect } from "@/components/steg/pagination";
 import { UnauthorizedPage } from "@/components/steg/unauthorized-page";
 import { useRequirePermission } from "@/hooks/use-require-permission";
-import { clientById, formatDate, formatTND, invoices, payments } from "@/lib/steg-data";
+import { useAuth } from "@/context/auth";
+import { PaymentForm } from "@/components/steg/payment-form";
+import { ConfirmDialog } from "@/components/steg/confirm-dialog";
+import {
+  useStegStore,
+  methodLabels,
+  formatTND,
+  formatDate,
+  clientById,
+  DEFAULT_PER_PAGE,
+  type Payment,
+  type PaymentMethod,
+} from "@/lib/store";
 
 export const Route = createFileRoute("/paiements")({
   head: () => ({
@@ -27,13 +39,6 @@ export const Route = createFileRoute("/paiements")({
   component: PaymentsPage,
 });
 
-const methodLabels: Record<string, string> = {
-  virement: "Virement",
-  especes: "Espèces",
-  cheque: "Chèque",
-  en_ligne: "En ligne",
-};
-
 const methodIcons: Record<string, typeof CreditCard> = {
   virement: Banknote,
   especes: Wallet,
@@ -42,19 +47,29 @@ const methodIcons: Record<string, typeof CreditCard> = {
 };
 
 function PaymentsPage() {
-  const [locaux, setLocaux] = useState<typeof payments>([]);
+  const ok = useRequirePermission("paiements:view");
+  const { hasPermission } = useAuth();
+  const canManage = hasPermission("paiements:manage");
+
+  const clients = useStegStore((s) => s.clients);
+  const invoices = useStegStore((s) => s.invoices);
+  const payments = useStegStore((s) => s.payments);
+  const addPayment = useStegStore((s) => s.addPayment);
+  const updatePayment = useStegStore((s) => s.updatePayment);
+  const deletePayment = useStegStore((s) => s.deletePayment);
+
   const [factureId, setFactureId] = useState("");
   const [montant, setMontant] = useState("");
   const [methode, setMethode] = useState("virement");
   const [q, setQ] = useState("");
   const [filterMethode, setFilterMethode] = useState<string>("tous");
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(15);
-
-  const allPayments = useMemo(() => [...locaux, ...payments], [locaux]);
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
+  const [editPayment, setEditPayment] = useState<Payment | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Payment | null>(null);
 
   const allFiltered = useMemo(() => {
-    let filtered = allPayments;
+    let filtered = payments;
     if (filterMethode !== "tous") {
       filtered = filtered.filter((p) => p.methode === filterMethode);
     }
@@ -62,7 +77,7 @@ function PaymentsPage() {
       const t = q.toLowerCase();
       filtered = filtered.filter((p) => {
         const f = invoices.find((i) => i.id === p.factureId);
-        const clientName = f ? (clientById(f.clientId)?.nom ?? "") : "";
+        const clientName = f ? (clientById(f.clientId, clients)?.nom ?? "") : "";
         return (
           p.id.toLowerCase().includes(t) ||
           p.factureId.toLowerCase().includes(t) ||
@@ -71,25 +86,24 @@ function PaymentsPage() {
       });
     }
     return filtered.sort((a, b) => b.datePaiement.localeCompare(a.datePaiement));
-  }, [allPayments, q, filterMethode]);
+  }, [payments, q, filterMethode, invoices, clients]);
 
   const liste = useMemo(
     () => allFiltered.slice((page - 1) * perPage, page * perPage),
     [allFiltered, page, perPage],
   );
 
-  const total = allPayments.reduce((s, p) => s + p.montant, 0);
+  const total = payments.reduce((s, p) => s + p.montant, 0);
 
   const methodStats = useMemo(() => {
     const map = new Map<string, { count: number; total: number }>();
-    allPayments.forEach((p) => {
+    payments.forEach((p) => {
       const existing = map.get(p.methode) ?? { count: 0, total: 0 };
       map.set(p.methode, { count: existing.count + 1, total: existing.total + p.montant });
     });
     return [...map.entries()].sort((a, b) => b[1].total - a[1].total);
-  }, [allPayments]);
+  }, [payments]);
 
-  const ok = useRequirePermission("paiements:view");
   if (!ok) return <UnauthorizedPage />;
 
   const submit = (e: React.FormEvent) => {
@@ -105,21 +119,17 @@ function PaymentsPage() {
       return;
     }
     if (m > facture.montant - facture.montantPaye) {
-      toast.error("Montant exceeds le reste dû", {
+      toast.error("Montant dépasse le reste dû", {
         description: `Reste dû : ${formatTND(facture.montant - facture.montantPaye)}`,
       });
       return;
     }
-    setLocaux((l) => [
-      {
-        id: `PAY-L${l.length + 1}`,
-        factureId: facture.id,
-        montant: m,
-        datePaiement: new Date().toISOString().slice(0, 10),
-        methode: methode as (typeof payments)[number]["methode"],
-      },
-      ...l,
-    ]);
+    addPayment({
+      factureId: facture.id,
+      montant: m,
+      datePaiement: new Date().toISOString().slice(0, 10),
+      methode: methode as Payment["methode"],
+    });
     toast.success("Paiement enregistré", {
       description: `${formatTND(m)} rapproché de la facture ${facture.id}.`,
     });
@@ -127,11 +137,25 @@ function PaymentsPage() {
     setMontant("");
   };
 
+  function handleUpdate(data: Omit<Payment, "id">) {
+    if (!editPayment) return;
+    updatePayment(editPayment.id, data);
+    setEditPayment(null);
+    toast.success("Paiement modifié", { description: `Le paiement a été mis à jour.` });
+  }
+
+  function handleDelete() {
+    if (!deleteTarget) return;
+    deletePayment(deleteTarget.id);
+    setDeleteTarget(null);
+    toast.success("Paiement supprimé", { description: `Le paiement a été supprimé.` });
+  }
+
   return (
     <>
       <PageHeader
         title="Paiements"
-        subtitle={`${allPayments.length} encaissements enregistrés · ${formatTND(total)}`}
+        subtitle={`${payments.length} encaissements enregistrés · ${formatTND(total)}`}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -164,6 +188,7 @@ function PaymentsPage() {
             <label className="block">
               <span className="text-xs text-muted-foreground">Référence facture</span>
               <input
+                aria-label="Référence facture"
                 value={factureId}
                 onChange={(e) => setFactureId(e.target.value)}
                 placeholder="FAC-00012"
@@ -173,6 +198,7 @@ function PaymentsPage() {
             <label className="block">
               <span className="text-xs text-muted-foreground">Montant (TND)</span>
               <input
+                aria-label="Montant en TND"
                 value={montant}
                 onChange={(e) => setMontant(e.target.value)}
                 inputMode="decimal"
@@ -183,6 +209,7 @@ function PaymentsPage() {
             <label className="block">
               <span className="text-xs text-muted-foreground">Méthode</span>
               <select
+                aria-label="Méthode de paiement"
                 value={methode}
                 onChange={(e) => setMethode(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-input bg-background px-3 py-2"
@@ -210,6 +237,7 @@ function PaymentsPage() {
               <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
                 <input
+                  aria-label="Rechercher"
                   value={q}
                   onChange={(e) => {
                     setQ(e.target.value);
@@ -220,6 +248,7 @@ function PaymentsPage() {
                 />
               </div>
               <select
+                aria-label="Filtrer par méthode"
                 value={filterMethode}
                 onChange={(e) => {
                   setFilterMethode(e.target.value);
@@ -239,12 +268,13 @@ function PaymentsPage() {
           <table className="w-full text-sm">
             <thead className="bg-secondary/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 font-medium">Paiement</th>
-                <th className="px-4 py-3 font-medium">Facture</th>
-                <th className="px-4 py-3 font-medium">Client</th>
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Méthode</th>
-                <th className="px-4 py-3 text-right font-medium">Montant</th>
+                <th scope="col" className="px-4 py-3 font-medium">Paiement</th>
+                <th scope="col" className="px-4 py-3 font-medium">Facture</th>
+                <th scope="col" className="px-4 py-3 font-medium">Client</th>
+                <th scope="col" className="px-4 py-3 font-medium">Date</th>
+                <th scope="col" className="px-4 py-3 font-medium">Méthode</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Montant</th>
+                {canManage && <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -255,7 +285,7 @@ function PaymentsPage() {
                     <td className="px-4 py-3 font-medium">{p.id}</td>
                     <td className="px-4 py-3">{p.factureId}</td>
                     <td className="px-4 py-3 text-muted-foreground">
-                      {f ? clientById(f.clientId)?.nom : "—"}
+                      {f ? clientById(f.clientId, clients)?.nom : "—"}
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {formatDate(p.datePaiement)}
@@ -268,6 +298,26 @@ function PaymentsPage() {
                     <td className="px-4 py-3 text-right font-semibold tabular-nums text-success">
                       +{formatTND(p.montant)}
                     </td>
+                    {canManage && (
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => setEditPayment(p)}
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                            title="Modifier"
+                          >
+                            <Pencil className="size-4" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteTarget(p)}
+                            className="rounded-md p-1.5 text-muted-foreground hover:bg-danger/12 hover:text-danger"
+                            title="Supprimer"
+                          >
+                            <Trash2 className="size-4" />
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 );
               })}
@@ -284,6 +334,23 @@ function PaymentsPage() {
           />
         </div>
       </div>
+
+      {editPayment && (
+        <PaymentForm
+          payment={editPayment}
+          onSubmit={handleUpdate}
+          onCancel={() => setEditPayment(null)}
+        />
+      )}
+
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Supprimer le paiement"
+          description={`Voulez-vous vraiment supprimer le paiement ${deleteTarget.id} ? Cette action est irréversible.`}
+          onConfirm={handleDelete}
+          onCancel={() => setDeleteTarget(null)}
+        />
+      )}
     </>
   );
 }

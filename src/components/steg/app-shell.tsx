@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { useAuth, roleLabels, type Role, type Permission } from "@/context/auth";
 import { useTheme } from "@/context/theme";
-import { invoices } from "@/lib/steg-data";
+import { useStegStore } from "@/lib/store";
 
 interface NavItem {
   to: string;
@@ -39,6 +39,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { user, setUser, hasPermission } = useAuth();
   const { resolved, toggle } = useTheme();
+  const invoices = useStegStore((s) => s.invoices);
   const alertes = invoices.filter((i) => i.statut === "en_retard" || i.statut === "impayee").length;
 
   const visibleNav = nav.filter((item) => hasPermission(item.permission));

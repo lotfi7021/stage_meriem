@@ -7,14 +7,14 @@ import { Pagination, PerPageSelect } from "@/components/steg/pagination";
 import { UnauthorizedPage } from "@/components/steg/unauthorized-page";
 import { useRequirePermission } from "@/hooks/use-require-permission";
 import {
-  clientById,
-  formatDate,
+  useStegStore,
+  computeRiskScores,
   formatTND,
-  invoices,
-  payments,
-  riskScores,
+  formatDate,
   typeLabels,
-} from "@/lib/steg-data";
+  riskBarColor,
+  clientById,
+} from "@/lib/store";
 
 export const Route = createFileRoute("/clients/$clientId")({
   head: () => ({
@@ -36,12 +36,23 @@ export const Route = createFileRoute("/clients/$clientId")({
 
 function ClientDetail() {
   const { clientId } = Route.useParams();
-  const client = clientById(clientId);
+  const { clients, invoices, payments } = useStegStore();
+
+  const ok = useRequirePermission("clients:view");
+  if (!ok) return <UnauthorizedPage />;
+
+  const client = clientById(clientId, clients);
+
+  const riskScores = useMemo(
+    () => computeRiskScores({ clients, invoices }),
+    [clients, invoices],
+  );
+
+  const risk = client ? riskScores.find((r) => r.clientId === client.id) : null;
+
   const [invPage, setInvPage] = useState(1);
   const [payPage, setPayPage] = useState(1);
   const perPage = 8;
-
-  const risk = client ? riskScores.find((r) => r.clientId === client.id)! : null;
 
   const inv = useMemo(
     () =>
@@ -50,14 +61,14 @@ function ClientDetail() {
             .filter((i) => i.clientId === client.id)
             .sort((a, b) => b.dateEmission.localeCompare(a.dateEmission))
         : [],
-    [client],
+    [client, invoices],
   );
   const encours = inv.reduce((s, i) => s + (i.montant - i.montantPaye), 0);
 
   const clientPayments = useMemo(() => {
     const invoiceIds = new Set(inv.map((i) => i.id));
     return payments.filter((p) => invoiceIds.has(p.factureId));
-  }, [inv]);
+  }, [inv, payments]);
 
   const stats = useMemo(
     () => ({
@@ -74,9 +85,6 @@ function ClientDetail() {
 
   const paginatedInv = inv.slice((invPage - 1) * perPage, invPage * perPage);
   const paginatedPayments = clientPayments.slice((payPage - 1) * perPage, payPage * perPage);
-
-  const ok = useRequirePermission("clients:view");
-  if (!ok) return <UnauthorizedPage />;
 
   if (!client || !risk) {
     return <p className="text-sm text-muted-foreground">Client introuvable.</p>;
@@ -180,13 +188,7 @@ function ClientDetail() {
 
           <div className="mt-4 h-4 rounded-full bg-secondary">
             <div
-              className={`h-4 rounded-full transition-all ${
-                risk.categorie === "eleve"
-                  ? "bg-danger"
-                  : risk.categorie === "moyen"
-                    ? "bg-warning"
-                    : "bg-success"
-              }`}
+              className={`h-4 rounded-full transition-all ${riskBarColor(risk.categorie)}`}
               style={{ width: `${risk.score}%` }}
             />
           </div>
@@ -224,13 +226,13 @@ function ClientDetail() {
         <table className="w-full text-sm">
           <thead className="bg-secondary/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-4 py-3 font-medium">Facture</th>
-              <th className="px-4 py-3 font-medium">Émission</th>
-              <th className="px-4 py-3 font-medium">Échéance</th>
-              <th className="px-4 py-3 text-right font-medium">Montant</th>
-              <th className="px-4 py-3 text-right font-medium">Payé</th>
-              <th className="px-4 py-3 font-medium">Progression</th>
-              <th className="px-4 py-3 font-medium">Statut</th>
+              <th scope="col" className="px-4 py-3 font-medium">Facture</th>
+              <th scope="col" className="px-4 py-3 font-medium">Émission</th>
+              <th scope="col" className="px-4 py-3 font-medium">Échéance</th>
+              <th scope="col" className="px-4 py-3 text-right font-medium">Montant</th>
+              <th scope="col" className="px-4 py-3 text-right font-medium">Payé</th>
+              <th scope="col" className="px-4 py-3 font-medium">Progression</th>
+              <th scope="col" className="px-4 py-3 font-medium">Statut</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -275,11 +277,11 @@ function ClientDetail() {
           <table className="w-full text-sm">
             <thead className="bg-secondary/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 font-medium">Paiement</th>
-                <th className="px-4 py-3 font-medium">Facture</th>
-                <th className="px-4 py-3 font-medium">Date</th>
-                <th className="px-4 py-3 font-medium">Méthode</th>
-                <th className="px-4 py-3 text-right font-medium">Montant</th>
+                <th scope="col" className="px-4 py-3 font-medium">Paiement</th>
+                <th scope="col" className="px-4 py-3 font-medium">Facture</th>
+                <th scope="col" className="px-4 py-3 font-medium">Date</th>
+                <th scope="col" className="px-4 py-3 font-medium">Méthode</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Montant</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">

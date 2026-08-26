@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, Fragment } from "react";
 import {
   Bar,
   BarChart,
@@ -18,7 +18,17 @@ import { Pagination, PerPageSelect } from "@/components/steg/pagination";
 import { UnauthorizedPage } from "@/components/steg/unauthorized-page";
 import { useRequirePermission } from "@/hooks/use-require-permission";
 import { ShieldAlert, ShieldCheck, Shield, ChevronDown, ChevronUp, Search } from "lucide-react";
-import { clientById, riskScores, typeLabels, type RiskCategory } from "@/lib/steg-data";
+import {
+  useStegStore,
+  computeRiskScores,
+  typeLabels,
+  riskBarColor,
+  PIE_COLORS,
+  tooltipStyle,
+  DEFAULT_PER_PAGE,
+  clientById,
+  type RiskCategory,
+} from "@/lib/store";
 
 export const Route = createFileRoute("/risques")({
   head: () => ({
@@ -39,25 +49,25 @@ export const Route = createFileRoute("/risques")({
   component: RiskPage,
 });
 
-const pieColors = {
-  faible: "var(--success)",
-  moyen: "var(--warning)",
-  eleve: "var(--danger)",
-};
-
 function RiskPage() {
-  const sorted = [...riskScores].sort((a, b) => b.score - a.score);
+  const { clients, invoices } = useStegStore();
   const [expandedClient, setExpandedClient] = useState<string | null>(null);
   const [filterCategorie, setFilterCategorie] = useState<RiskCategory | "tous">("tous");
   const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(10);
+  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
 
-  const counts = {
-    faible: sorted.filter((r) => r.categorie === "faible").length,
-    moyen: sorted.filter((r) => r.categorie === "moyen").length,
-    eleve: sorted.filter((r) => r.categorie === "eleve").length,
-  };
+  const riskScores = useMemo(() => computeRiskScores({ clients, invoices }), [clients, invoices]);
+  const sorted = useMemo(() => [...riskScores].sort((a, b) => b.score - a.score), [riskScores]);
+
+  const counts = useMemo(
+    () => ({
+      faible: sorted.filter((r) => r.categorie === "faible").length,
+      moyen: sorted.filter((r) => r.categorie === "moyen").length,
+      eleve: sorted.filter((r) => r.categorie === "eleve").length,
+    }),
+    [sorted],
+  );
 
   const filtered = useMemo(() => {
     let list = sorted;
@@ -67,32 +77,40 @@ function RiskPage() {
     if (q.trim()) {
       const t = q.toLowerCase();
       list = list.filter((r) => {
-        const c = clientById(r.clientId);
+        const c = clientById(r.clientId, clients);
         return c?.nom.toLowerCase().includes(t) || r.clientId.toLowerCase().includes(t);
       });
     }
     return list;
-  }, [sorted, filterCategorie, q]);
+  }, [sorted, filterCategorie, q, clients]);
 
   const paginated = useMemo(
     () => filtered.slice((page - 1) * perPage, page * perPage),
     [filtered, page, perPage],
   );
 
-  const chart = sorted.slice(0, 10).map((r) => ({
-    nom: (clientById(r.clientId)?.nom ?? "").slice(0, 16),
-    score: r.score,
-  }));
+  const chart = useMemo(
+    () =>
+      sorted.slice(0, 10).map((r) => ({
+        nom: (clientById(r.clientId, clients)?.nom ?? "").slice(0, 16),
+        score: r.score,
+      })),
+    [sorted, clients],
+  );
 
-  const distribution = [
-    { name: "Faible", value: counts.faible },
-    { name: "Moyen", value: counts.moyen },
-    { name: "Élevé", value: counts.eleve },
-  ];
+  const distribution = useMemo(
+    () => [
+      { name: "Faible", value: counts.faible },
+      { name: "Moyen", value: counts.moyen },
+      { name: "Élevé", value: counts.eleve },
+    ],
+    [counts],
+  );
 
-  const avgScore = sorted.length
-    ? (sorted.reduce((s, r) => s + r.score, 0) / sorted.length).toFixed(1)
-    : "0";
+  const avgScore = useMemo(
+    () => (sorted.length ? (sorted.reduce((s, r) => s + r.score, 0) / sorted.length).toFixed(1) : "0"),
+    [sorted],
+  );
 
   const ok = useRequirePermission("risques:view");
   if (!ok) return <UnauthorizedPage />;
@@ -149,14 +167,7 @@ function RiskPage() {
                   tick={{ fontSize: 11 }}
                   stroke="var(--muted-foreground)"
                 />
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                />
+                <Tooltip contentStyle={tooltipStyle} />
                 <Bar dataKey="score" fill="var(--primary)" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -176,17 +187,10 @@ function RiskPage() {
                   outerRadius={65}
                 >
                   {distribution.map((entry, i) => (
-                    <Cell key={i} fill={Object.values(pieColors)[i]} />
+                    <Cell key={i} fill={PIE_COLORS[i]} />
                   ))}
                 </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
-                />
+                <Tooltip contentStyle={tooltipStyle} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -196,7 +200,7 @@ function RiskPage() {
                 <span className="flex items-center gap-2">
                   <span
                     className="size-2.5 rounded-full"
-                    style={{ background: Object.values(pieColors)[i] }}
+                    style={{ background: PIE_COLORS[i] }}
                   />
                   {d.name}
                 </span>
@@ -217,6 +221,7 @@ function RiskPage() {
               setPage(1);
             }}
             placeholder="Rechercher un client…"
+            aria-label="Rechercher un client"
             className="w-full rounded-lg border border-input bg-card py-2 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-ring/40"
           />
         </div>
@@ -226,6 +231,7 @@ function RiskPage() {
             setFilterCategorie(e.target.value as RiskCategory | "tous");
             setPage(1);
           }}
+          aria-label="Filtrer par catégorie de risque"
           className="rounded-lg border border-input bg-card px-3 py-2 text-sm"
         >
           <option value="tous">Toutes catégories</option>
@@ -247,25 +253,25 @@ function RiskPage() {
         <table className="w-full text-sm">
           <thead className="bg-secondary/60 text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
-              <th className="px-4 py-3 font-medium">Client</th>
-              <th className="px-4 py-3 font-medium">Type</th>
-              <th className="px-4 py-3 font-medium">Facteur dominant</th>
-              <th className="px-4 py-3 text-right font-medium">Score</th>
-              <th className="px-4 py-3 font-medium">Catégorie</th>
-              <th className="px-4 py-3 font-medium w-10"></th>
+              <th scope="col" className="px-4 py-3 font-medium">Client</th>
+              <th scope="col" className="px-4 py-3 font-medium">Type</th>
+              <th scope="col" className="px-4 py-3 font-medium">Facteur dominant</th>
+              <th scope="col" className="px-4 py-3 text-right font-medium">Score</th>
+              <th scope="col" className="px-4 py-3 font-medium">Catégorie</th>
+              <th scope="col" className="px-4 py-3 font-medium w-10"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {paginated.map((r) => {
-              const c = clientById(r.clientId)!;
+              const c = clientById(r.clientId, clients)!;
               const top = [...r.facteurs].sort((a, b) => b.poids - a.poids)[0]!;
               const isExpanded = expandedClient === r.clientId;
               return (
-                <>
+                <Fragment key={r.clientId}>
                   <tr
-                    key={r.clientId}
                     className="cursor-pointer transition-colors hover:bg-secondary/40"
                     onClick={() => setExpandedClient(isExpanded ? null : r.clientId)}
+                    aria-expanded={isExpanded}
                   >
                     <td className="px-4 py-3">
                       <Link
@@ -309,13 +315,7 @@ function RiskPage() {
                               </div>
                               <div className="mt-2 h-2 rounded-full bg-secondary">
                                 <div
-                                  className={`h-2 rounded-full ${
-                                    f.poids > 15
-                                      ? "bg-danger"
-                                      : f.poids > 8
-                                        ? "bg-warning"
-                                        : "bg-success"
-                                  }`}
+                                  className={`h-2 rounded-full ${riskBarColor(f.poids > 15 ? "eleve" : f.poids > 8 ? "moyen" : "faible")}`}
                                   style={{ width: `${Math.max(0, Math.min(100, f.poids * 2.5))}%` }}
                                 />
                               </div>
@@ -334,7 +334,7 @@ function RiskPage() {
                       </td>
                     </tr>
                   )}
-                </>
+                </Fragment>
               );
             })}
           </tbody>

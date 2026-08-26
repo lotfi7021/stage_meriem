@@ -29,14 +29,16 @@ import { StatusBadge } from "@/components/steg/badges";
 import { UnauthorizedPage } from "@/components/steg/unauthorized-page";
 import { useRequirePermission } from "@/hooks/use-require-permission";
 import {
-  clientById,
-  formatDate,
+  useStegStore,
+  computeKpis,
+  computeMonthlySeries,
+  methodLabels,
   formatTND,
-  invoices,
-  kpis,
-  monthlySeries,
-  payments,
-} from "@/lib/steg-data";
+  formatDate,
+  clientById,
+  PIE_COLORS,
+  tooltipStyle,
+} from "@/lib/store";
 
 export const Route = createFileRoute("/rapports")({
   head: () => ({
@@ -57,8 +59,6 @@ export const Route = createFileRoute("/rapports")({
   component: ReportsPage,
 });
 
-const pieColors = ["var(--success)", "var(--warning)", "var(--danger)", "var(--primary)"];
-
 function downloadCSV(filename: string, csv: string) {
   const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
@@ -70,10 +70,11 @@ function downloadCSV(filename: string, csv: string) {
 }
 
 function exportInvoicesCSV() {
+  const { invoices, clients } = useStegStore.getState();
   const headers = ["ID", "Client", "Montant", "Payé", "Reste dû", "Émission", "Échéance", "Statut"];
   const rows = invoices.map((f) => [
     f.id,
-    clientById(f.clientId)?.nom ?? "",
+    clientById(f.clientId, clients)?.nom ?? "",
     f.montant,
     f.montantPaye,
     f.montant - f.montantPaye,
@@ -87,13 +88,14 @@ function exportInvoicesCSV() {
 }
 
 function exportPaymentsCSV() {
+  const { invoices, payments, clients } = useStegStore.getState();
   const headers = ["ID", "Facture", "Client", "Montant", "Date", "Méthode"];
   const rows = payments.map((p) => {
     const f = invoices.find((i) => i.id === p.factureId);
     return [
       p.id,
       p.factureId,
-      f ? (clientById(f.clientId)?.nom ?? "") : "",
+      f ? (clientById(f.clientId, clients)?.nom ?? "") : "",
       p.montant,
       p.datePaiement,
       p.methode,
@@ -105,7 +107,8 @@ function exportPaymentsCSV() {
 }
 
 function exportMonthlyReportCSV() {
-  const series = monthlySeries();
+  const { invoices } = useStegStore.getState();
+  const series = computeMonthlySeries(invoices);
   const headers = ["Mois", "Facturé", "Encaissé", "Écart", "Taux recouvrement"];
   const rows = series.map((s) => [
     s.mois,
@@ -120,8 +123,9 @@ function exportMonthlyReportCSV() {
 }
 
 function ReportsPage() {
-  const k = kpis();
-  const series = monthlySeries();
+  const { clients, invoices, payments } = useStegStore();
+  const k = useMemo(() => computeKpis({ clients, invoices }), [clients, invoices]);
+  const series = useMemo(() => computeMonthlySeries(invoices), [invoices]);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -132,14 +136,17 @@ function ReportsPage() {
     if (dateFrom) list = list.filter((i) => i.dateEcheance >= dateFrom);
     if (dateTo) list = list.filter((i) => i.dateEcheance <= dateTo);
     return list;
-  }, [dateFrom, dateTo]);
+  }, [invoices, dateFrom, dateTo]);
 
-  const pieData = [
-    { name: "Payées", value: invoices.filter((i) => i.statut === "payee").length },
-    { name: "En attente", value: invoices.filter((i) => i.statut === "en_attente").length },
-    { name: "En retard", value: invoices.filter((i) => i.statut === "en_retard").length },
-    { name: "Impayées", value: invoices.filter((i) => i.statut === "impayee").length },
-  ];
+  const pieData = useMemo(
+    () => [
+      { name: "Payées", value: invoices.filter((i) => i.statut === "payee").length },
+      { name: "En attente", value: invoices.filter((i) => i.statut === "en_attente").length },
+      { name: "En retard", value: invoices.filter((i) => i.statut === "en_retard").length },
+      { name: "Impayées", value: invoices.filter((i) => i.statut === "impayee").length },
+    ],
+    [invoices],
+  );
 
   const paymentMethods = useMemo(() => {
     const map = new Map<string, number>();
@@ -147,14 +154,7 @@ function ReportsPage() {
     return [...map.entries()]
       .map(([method, total]) => ({ method, total }))
       .sort((a, b) => b.total - a.total);
-  }, []);
-
-  const methodLabels: Record<string, string> = {
-    virement: "Virement",
-    especes: "Espèces",
-    cheque: "Chèque",
-    en_ligne: "En ligne",
-  };
+  }, [payments]);
 
   const ok = useRequirePermission("rapports:view");
   if (!ok) return <UnauthorizedPage />;
@@ -285,12 +285,7 @@ function ReportsPage() {
                 />
                 <Tooltip
                   formatter={(v: number) => formatTND(v)}
-                  contentStyle={{
-                    background: "var(--card)",
-                    border: "1px solid var(--border)",
-                    borderRadius: 8,
-                    fontSize: 12,
-                  }}
+                  contentStyle={tooltipStyle}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Bar dataKey="facture" name="Facturé" fill="var(--primary)" radius={[4, 4, 0, 0]} />
@@ -333,17 +328,10 @@ function ReportsPage() {
                     outerRadius={60}
                   >
                     {pieData.map((_, i) => (
-                      <Cell key={i} fill={pieColors[i % pieColors.length]} />
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip
-                    contentStyle={{
-                      background: "var(--card)",
-                      border: "1px solid var(--border)",
-                      borderRadius: 8,
-                      fontSize: 12,
-                    }}
-                  />
+                  <Tooltip contentStyle={tooltipStyle} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
@@ -373,14 +361,14 @@ function ReportsPage() {
               type="date"
               value={dateFrom}
               onChange={(e) => setDateFrom(e.target.value)}
-              placeholder="Du"
+              aria-label="Date de début"
               className="rounded-md border border-input bg-background px-2 py-1 text-xs"
             />
             <input
               type="date"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
-              placeholder="Au"
+              aria-label="Date de fin"
               className="rounded-md border border-input bg-background px-2 py-1 text-xs"
             />
           </div>
@@ -392,7 +380,7 @@ function ReportsPage() {
               className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-secondary/30"
             >
               <div>
-                <p className="text-sm font-medium">{clientById(f.clientId)?.nom}</p>
+                <p className="text-sm font-medium">{clientById(f.clientId, clients)?.nom}</p>
                 <p className="text-xs text-muted-foreground">
                   {f.id} · échéance dépassée le {formatDate(f.dateEcheance)}
                 </p>
