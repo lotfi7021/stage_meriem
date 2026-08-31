@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from "@/hooks/use-users";
 import { useRequirePermission } from "@/hooks/use-require-permission";
-import { useAuth } from "@/context/auth";
 import { requireRoutePermission } from "@/lib/route-guard";
 import { PageHeader } from "@/components/steg/kpi-card";
 import { ConfirmDialog } from "@/components/steg/confirm-dialog";
@@ -54,7 +53,6 @@ function UsersPage() {
     [q, users],
   );
 
-  const totalPages = Math.ceil(rows.length / perPage);
   const paginatedRows = rows.slice((page - 1) * perPage, page * perPage);
 
   if (!ok) return <UnauthorizedPage />;

@@ -30,7 +30,7 @@ async function seed() {
           nom: u.nom,
           email: u.email,
           role: u.role,
-          motDePasseHash: await bcrypt.hash(u.motDePasse, 10),
+          motDePasseHash:       await bcrypt.hash(u.motDePasse, 12),
         }),
       );
     }

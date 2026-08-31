@@ -15,11 +15,6 @@ export type Permission =
   | 'notifications:manage'
   | 'users:manage';
 
-export const roleLabels: Record<Role, string> = {
-  admin: 'Administrateur',
-  agent: 'Agent',
-};
-
 export const rolePermissions: Record<Role, Permission[]> = {
   admin: [
     'dashboard:view',

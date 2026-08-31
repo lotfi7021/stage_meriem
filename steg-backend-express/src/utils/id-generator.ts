@@ -1,4 +1,4 @@
-import { DataSource, Repository, EntityTarget, ObjectLiteral } from 'typeorm';
+import { DataSource, EntityTarget, ObjectLiteral } from 'typeorm';
 
 /**
  * Génère le prochain ID séquentiel (ex: CLI-00001) de façon thread-safe

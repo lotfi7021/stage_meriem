@@ -30,10 +30,3 @@ export class PaymentEntity {
   @Column({ type: 'enum', enum: ['virement', 'especes', 'cheque', 'en_ligne'] })
   methode: PaymentMethod;
 }
-
-export const methodLabels: Record<PaymentMethod, string> = {
-  virement: 'Virement',
-  especes: 'Espèces',
-  cheque: 'Chèque',
-  en_ligne: 'En ligne',
-};

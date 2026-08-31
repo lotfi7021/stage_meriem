@@ -16,4 +16,4 @@ export type { Notification } from "./notifications";
 export type { User, CreateUserDto, UpdateUserDto } from "./users";
 export type { RiskScore } from "./risk-scoring";
 
-export type { ClientType, InvoiceStatus } from "@/lib/steg-data";
+export type { ClientType, InvoiceStatus, RiskCategory } from "@/lib/steg-data";

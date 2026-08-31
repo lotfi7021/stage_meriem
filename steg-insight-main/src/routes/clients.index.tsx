@@ -85,7 +85,6 @@ function ClientsPage() {
     [q, type, clients],
   );
 
-  const totalPages = Math.ceil(rows.length / perPage);
   const paginatedRows = rows.slice((page - 1) * perPage, page * perPage);
 
   const stats = useMemo(

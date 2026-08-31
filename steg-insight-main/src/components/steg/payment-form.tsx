@@ -3,13 +3,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { X } from "lucide-react";
 import type { Payment } from "@/lib/steg-data";
-
-const methodLabels: Record<string, string> = {
-  virement: "Virement",
-  especes: "Espèces",
-  cheque: "Chèque",
-  en_ligne: "En ligne",
-};
+import { methodLabels } from "@/lib/store";
 
 const paymentSchema = z.object({
   montant: z.number().min(0.01, "Le montant doit être positif"),

@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo, useEffect } from "react";
-import { Bell, BellOff, CheckCheck, AlertTriangle, Clock, FileText } from "lucide-react";
+import { BellOff, CheckCheck, AlertTriangle, Clock, FileText } from "lucide-react";
 import { PageHeader } from "@/components/steg/kpi-card";
 import { StatusBadge } from "@/components/steg/badges";
 import { Pagination, PerPageSelect } from "@/components/steg/pagination";

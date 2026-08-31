@@ -11,7 +11,6 @@ import { useClients } from "@/hooks/use-clients";
 import { useInvoices } from "@/hooks/use-invoices";
 import { usePayments } from "@/hooks/use-payments";
 import { useRiskScores } from "@/hooks/use-risk-scores";
-import type { Client, Invoice, Payment, RiskScore } from "@/lib/api";
 import { formatTND, formatDate, typeLabels, riskBarColor, clientById } from "@/lib/store";
 
 export const Route = createFileRoute("/clients/$clientId")({

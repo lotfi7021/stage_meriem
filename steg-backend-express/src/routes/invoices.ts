@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { AppDataSource } from '../data-source';
-import { InvoiceEntity, InvoiceStatus } from '../entities/invoice.entity';
+import { InvoiceEntity } from '../entities/invoice.entity';
 import { computeInvoiceStatus } from '../utils/invoice-status';
 import { generateSequentialId } from '../utils/id-generator';
 import { authenticate, requirePermissions } from '../middleware/auth';
@@ -76,10 +76,26 @@ router.patch('/:id', requirePermissions('factures:manage'), async (req: Request,
 
     const { clientId, montant, dateEmission, dateEcheance, montantPaye } = req.body ?? {};
     if (clientId) invoice.clientId = clientId;
-    if (montant !== undefined) invoice.montant = montant;
+    if (montant !== undefined) {
+      if (typeof montant !== 'number' || montant <= 0) {
+        res.status(400).json({ statusCode: 400, message: 'montant doit être un nombre positif' });
+        return;
+      }
+      invoice.montant = montant;
+    }
     if (dateEmission) invoice.dateEmission = dateEmission;
     if (dateEcheance) invoice.dateEcheance = dateEcheance;
-    if (montantPaye !== undefined) invoice.montantPaye = montantPaye;
+    if (montantPaye !== undefined) {
+      if (typeof montantPaye !== 'number' || montantPaye < 0) {
+        res.status(400).json({ statusCode: 400, message: 'montantPaye doit être un nombre positif ou zéro' });
+        return;
+      }
+      if (montantPaye > invoice.montant) {
+        res.status(400).json({ statusCode: 400, message: 'montantPaye ne peut dépasser le montant' });
+        return;
+      }
+      invoice.montantPaye = montantPaye;
+    }
 
     invoice.statut = computeInvoiceStatus(invoice.montant, invoice.montantPaye, invoice.dateEcheance);
     const saved = await invoicesRepo().save(invoice);

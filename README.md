@@ -7,7 +7,7 @@ Projet de stage pour la Société Tunisienne de l'Électricité et du Gaz (STEG)
 ## 🏗️ Structure du Projet
 
 ```
-steg-meriem/
+stage_meriem/
 ├── steg-backend-express/     # API Backend (Node.js + Express + TypeScript)
 ├── steg-insight-main/        # Frontend (React + Vite + TanStack)
 ├── README.md
