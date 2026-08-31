@@ -2,13 +2,13 @@ import { Request, Response, NextFunction } from 'express';
 import * as jwt from 'jsonwebtoken';
 import { Role, hasPermission, Permission } from '../roles';
 
-export interface JwtPayload {
+interface JwtPayload {
   sub: string;
   email: string;
   role: Role;
 }
 
-export interface AuthenticatedUser {
+interface AuthenticatedUser {
   userId: string;
   email: string;
   role: Role;

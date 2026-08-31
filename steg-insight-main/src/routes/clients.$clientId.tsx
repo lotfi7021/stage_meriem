@@ -3,7 +3,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft, TrendingUp, AlertTriangle, FileText, Clock } from "lucide-react";
 import { PageHeader, KpiCard } from "@/components/steg/kpi-card";
 import { RiskBadge, StatusBadge } from "@/components/steg/badges";
-import { Pagination, PerPageSelect } from "@/components/steg/pagination";
+import { Pagination } from "@/components/steg/pagination";
 import { UnauthorizedPage } from "@/components/steg/unauthorized-page";
 import { useRequirePermission } from "@/hooks/use-require-permission";
 import { requireRoutePermission } from "@/lib/route-guard";

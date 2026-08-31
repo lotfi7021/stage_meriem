@@ -6,6 +6,8 @@ import { PaymentEntity } from '../entities/payment.entity';
 import { generateSequentialId } from '../utils/id-generator';
 import { authenticate, requirePermissions } from '../middleware/auth';
 
+
+
 const router = Router();
 const clientsRepo = () => AppDataSource.getRepository(ClientEntity);
 
@@ -120,9 +122,6 @@ router.delete('/:id', requirePermissions('clients:manage'), async (req: Request,
       res.status(404).json({ statusCode: 404, message: `Client ${id} introuvable` });
       return;
     }
-
-    const invoicesRepo = AppDataSource.getRepository(InvoiceEntity);
-    const paymentsRepo = AppDataSource.getRepository(PaymentEntity);
 
     await AppDataSource.transaction(async (manager) => {
       const invoiceIds = (

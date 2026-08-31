@@ -1,10 +1,6 @@
 import type { RiskCategory } from "./steg-data";
 
-export type PaymentMethod = "virement" | "especes" | "cheque" | "en_ligne";
-
-export type MethodLabels = Record<PaymentMethod, string> & Record<string, string>;
-
-export const methodLabels: MethodLabels = {
+export const methodLabels: Record<string, string> = {
   virement: "Virement",
   especes: "Espèces",
   cheque: "Chèque",

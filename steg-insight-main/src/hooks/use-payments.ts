@@ -9,14 +9,6 @@ export function usePayments() {
   });
 }
 
-export function usePayment(id: string) {
-  return useQuery({
-    queryKey: ["payments", id],
-    queryFn: () => paymentsApi.findOne(id).then((r) => r.data),
-    enabled: !!id,
-  });
-}
-
 export function useCreatePayment() {
   const qc = useQueryClient();
   return useMutation({

@@ -7,11 +7,3 @@ export function useRiskScores() {
     queryFn: () => riskScoringApi.findAll().then((r) => r.data),
   });
 }
-
-export function useRiskScore(clientId: string) {
-  return useQuery({
-    queryKey: ["risk-scores", clientId],
-    queryFn: () => riskScoringApi.findOne(clientId).then((r) => r.data),
-    enabled: !!clientId,
-  });
-}

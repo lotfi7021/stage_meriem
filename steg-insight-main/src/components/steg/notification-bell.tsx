@@ -1,5 +1,3 @@
-"use client";
-
 import { Link } from "@tanstack/react-router";
 import { Bell } from "lucide-react";
 import { useInvoices } from "@/hooks/use-invoices";

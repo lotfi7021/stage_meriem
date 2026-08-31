@@ -21,7 +21,6 @@ import {
   clientById,
   statusLabels,
   DEFAULT_PER_PAGE,
-  tooltipStyle,
   riskBarColor,
 } from "@/lib/store";
 

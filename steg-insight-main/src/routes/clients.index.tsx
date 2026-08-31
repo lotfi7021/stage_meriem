@@ -68,7 +68,7 @@ function ClientsPage() {
   const [editClient, setEditClient] = useState<Client | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Client | null>(null);
 
-  const { data: clients = [], isLoading } = useClients();
+  const { data: clients = [] } = useClients();
   const { data: invoices = [] } = useInvoices();
   const { data: riskScores = [] } = useRiskScores();
   const createClient = useCreateClient();

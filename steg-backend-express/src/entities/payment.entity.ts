@@ -7,7 +7,7 @@ import {
 } from 'typeorm';
 import { InvoiceEntity } from './invoice.entity';
 
-export type PaymentMethod = 'virement' | 'especes' | 'cheque' | 'en_ligne';
+type PaymentMethod = 'virement' | 'especes' | 'cheque' | 'en_ligne';
 
 @Entity('payments')
 export class PaymentEntity {

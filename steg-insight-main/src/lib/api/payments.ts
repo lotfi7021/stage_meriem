@@ -1,12 +1,5 @@
 import { api } from "../api-client";
-
-export interface Payment {
-  id: string;
-  factureId: string;
-  montant: number;
-  datePaiement: string;
-  methode: "virement" | "especes" | "cheque" | "en_ligne";
-}
+import type { Payment } from "@/lib/steg-data";
 
 export interface CreatePaymentDto {
   factureId: string;
@@ -19,8 +12,6 @@ export type UpdatePaymentDto = Partial<CreatePaymentDto>;
 
 export const paymentsApi = {
   findAll: () => api.get<Payment[]>("/payments"),
-
-  findOne: (id: string) => api.get<Payment>(`/payments/${id}`),
 
   create: (data: CreatePaymentDto) => api.post<Payment>("/payments", data),
 

@@ -1,15 +1,5 @@
 import { api } from "../api-client";
-
-export interface Client {
-  id: string;
-  nom: string;
-  type: "particulier" | "entreprise" | "administration";
-  secteur: string;
-  adresse: string;
-  ancienneteMois: number;
-  retardsPasses: number;
-  delaiMoyenJours: number;
-}
+import type { Client } from "@/lib/steg-data";
 
 export interface CreateClientDto {
   nom: string;
@@ -25,8 +15,6 @@ export type UpdateClientDto = Partial<CreateClientDto>;
 
 export const clientsApi = {
   findAll: () => api.get<Client[]>("/clients"),
-
-  findOne: (id: string) => api.get<Client>(`/clients/${id}`),
 
   create: (data: CreateClientDto) => api.post<Client>("/clients", data),
 

@@ -1,14 +1,5 @@
 import { api } from "../api-client";
-
-export interface Invoice {
-  id: string;
-  clientId: string;
-  montant: number;
-  dateEmission: string;
-  dateEcheance: string;
-  statut: "payee" | "en_attente" | "en_retard" | "impayee";
-  montantPaye: number;
-}
+import type { Invoice } from "@/lib/steg-data";
 
 export interface CreateInvoiceDto {
   clientId: string;
@@ -30,8 +21,6 @@ export interface InvoiceFilters {
 export const invoicesApi = {
   findAll: (filters?: InvoiceFilters) =>
     api.get<Invoice[]>("/invoices", { params: filters }),
-
-  findOne: (id: string) => api.get<Invoice>(`/invoices/${id}`),
 
   create: (data: CreateInvoiceDto) => api.post<Invoice>("/invoices", data),
 

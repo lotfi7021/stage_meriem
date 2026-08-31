@@ -8,7 +8,7 @@ import { ConfirmDialog } from "@/components/steg/confirm-dialog";
 import { UnauthorizedPage } from "@/components/steg/unauthorized-page";
 import { Pagination, PerPageSelect } from "@/components/steg/pagination";
 import { roleLabels, type Role } from "@/context/auth";
-import { Search, Plus, Pencil, Trash2, Users as UsersIcon } from "lucide-react";
+import { Search, Plus, Pencil, Trash2 } from "lucide-react";
 import { DEFAULT_PER_PAGE } from "@/lib/store";
 import type { User } from "@/lib/api";
 
@@ -38,7 +38,7 @@ function UsersPage() {
   const [editUser, setEditUser] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
 
-  const { data: users = [], isLoading } = useUsers();
+  const { data: users = [] } = useUsers();
   const createUser = useCreateUser();
   const updateUser = useUpdateUser();
   const deleteUser = useDeleteUser();

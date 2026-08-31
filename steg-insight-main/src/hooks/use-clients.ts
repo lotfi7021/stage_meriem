@@ -9,14 +9,6 @@ export function useClients() {
   });
 }
 
-export function useClient(id: string) {
-  return useQuery({
-    queryKey: ["clients", id],
-    queryFn: () => clientsApi.findOne(id).then((r) => r.data),
-    enabled: !!id,
-  });
-}
-
 export function useCreateClient() {
   const qc = useQueryClient();
   return useMutation({

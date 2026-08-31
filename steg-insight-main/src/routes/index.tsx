@@ -31,7 +31,7 @@ import { useInvoices } from "@/hooks/use-invoices";
 import { usePayments } from "@/hooks/use-payments";
 import { useKpis, useMonthlySeries, useStatusBreakdown } from "@/hooks/use-dashboard";
 import { useRiskScores } from "@/hooks/use-risk-scores";
-import type { Kpis, MonthlySeries, StatusBreakdown } from "@/lib/api";
+import type { Kpis } from "@/lib/api";
 
 export const Route = createFileRoute("/")({
   head: () => ({

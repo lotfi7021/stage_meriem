@@ -7,7 +7,6 @@ import {
   ShieldAlert,
   BarChart3,
   Zap,
-  Bell,
   BellDot,
   Sun,
   Moon,

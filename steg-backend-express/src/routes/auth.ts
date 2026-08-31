@@ -7,7 +7,7 @@ import { authenticate, signToken } from '../middleware/auth';
 const router = Router();
 const usersRepo = () => AppDataSource.getRepository(UserEntity);
 
-/** POST /auth/login — rate limité: 5 req/min côté client, pas besoin de middleware ici pour un MVP */
+/** POST /auth/login */
 router.post('/login', async (req: Request, res: Response) => {
   try {
     const { email, motDePasse } = req.body ?? {};

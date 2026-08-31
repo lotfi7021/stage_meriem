@@ -9,14 +9,6 @@ export function useInvoices(filters?: InvoiceFilters) {
   });
 }
 
-export function useInvoice(id: string) {
-  return useQuery({
-    queryKey: ["invoices", id],
-    queryFn: () => invoicesApi.findOne(id).then((r) => r.data),
-    enabled: !!id,
-  });
-}
-
 export function useCreateInvoice() {
   const qc = useQueryClient();
   return useMutation({
