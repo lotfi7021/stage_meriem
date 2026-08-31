@@ -1,63 +1,16 @@
-import { Router, Request, Response } from 'express';
-import bcrypt from 'bcrypt';
-import { AppDataSource } from '../data-source';
-import { UserEntity } from '../entities/user.entity';
-import { authenticate, signToken } from '../middleware/auth';
+import { Router } from 'express';
+import { authenticate } from '../middleware/auth';
+import { AuthController } from '../controllers/auth.controller';
 
 const router = Router();
-const usersRepo = () => AppDataSource.getRepository(UserEntity);
 
-/** POST /auth/login */
-router.post('/login', async (req: Request, res: Response) => {
-  try {
-    const { email, motDePasse } = req.body ?? {};
-    if (!email || !motDePasse) {
-      res.status(400).json({ statusCode: 400, message: 'email et motDePasse requis' });
-      return;
-    }
+/** POST /auth/login - Authentification */
+router.post('/login', AuthController.login);
 
-    const user = await usersRepo().findOne({ where: { email } });
-    if (!user) {
-      res.status(401).json({ statusCode: 401, message: 'Identifiants invalides' });
-      return;
-    }
+/** POST /auth/logout - Déconnexion */
+router.post('/logout', authenticate, AuthController.logout);
 
-    const match = await bcrypt.compare(motDePasse, user.motDePasseHash);
-    if (!match) {
-      res.status(401).json({ statusCode: 401, message: 'Identifiants invalides' });
-      return;
-    }
-
-    const accessToken = signToken({
-      sub: user.id,
-      email: user.email,
-      role: user.role,
-    });
-
-    res.json({
-      accessToken,
-      user: { id: user.id, nom: user.nom, email: user.email, role: user.role },
-    });
-  } catch (err) {
-    console.error('Login error:', err);
-    res.status(500).json({ statusCode: 500, message: 'Erreur interne du serveur' });
-  }
-});
-
-/** POST /auth/logout */
-router.post('/logout', authenticate, (_req: Request, res: Response) => {
-  res.json({ loggedOut: true });
-});
-
-/** GET /auth/me */
-router.get('/me', authenticate, (req: Request, res: Response) => {
-  const u = req.user!;
-  res.json({
-    userId: u.userId,
-    email: u.email,
-    role: u.role,
-    nom: u.email.split('@')[0],
-  });
-});
+/** GET /auth/me - Informations utilisateur connecté */
+router.get('/me', authenticate, AuthController.me);
 
 export default router;
